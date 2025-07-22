@@ -40,3 +40,44 @@ schema_get_files_info = types.FunctionDeclaration(
         },
     ),
 )
+schema_get_file_content = types.FunctionDeclaration(
+    name="get_file_content",
+    description="Read the contents of the file",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The file to read contents from.",
+            )
+        },
+    ),
+)
+
+schema_run_python_file = types.FunctionDeclaration(
+    name="run_python_file",
+    description="Run a python file",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The python file to run.",
+            )
+        },
+    ),
+)
+
+schema_write_file = types.FunctionDeclaration(
+    name="write_file",
+    description="Write to a file",
+    parameters=types.Schema(
+        type=types.Type.OBJECT,
+        properties={
+            "file_path": types.Schema(
+                type=types.Type.STRING,
+                description="The file to write to. If not provided, create one else override the existing one",
+            )
+        },
+    ),
+)
