@@ -12,11 +12,11 @@ def get_file_content(working_directory, file_path):
 
     try:
         with open(target_file, "r") as f:
-            file_contents = f.read()
-            if len(file_contents) > MAX_CHARS:
-                file_contents = f.read(MAX_CHARS)
-            return (
-                f'{file_contents} [...File "{file_path}" truncated at 10000 characters]'
-            )
+            file_contents = f.read(MAX_CHARS)
+            if os.path.getsize(target_file) > MAX_CHARS:
+                file_contents += (
+                    f' [...File "{file_path}" truncated at 10000 characters]'
+                )
+            return file_contents
     except Exception as e:
         return f"Error reading file: {e}"

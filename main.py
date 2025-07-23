@@ -3,12 +3,54 @@ import sys
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from functions import get_files_info, get_file_content, run_python_file, write_file
+
 from functions.get_files_info import (
     schema_get_files_info,
     schema_get_file_content,
     schema_write_file,
     schema_run_python_file,
 )
+from configs import WORKING_DIR
+
+
+def call_function(function_call_part, verbose=False):
+    if verbose is True:
+        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+    else:
+        print(f" - Calling function: {function_call_part.name}")
+
+    function_names_dict = {
+        "get_files_info": get_files_info.get_files_info,
+        "write_file": write_file.write_file,
+        "get_file_content": get_file_content.get_file_content,
+        "run_python_file": run_python_file.run_python_file,
+    }
+    function_name = function_call_part.name
+    if function_name not in function_names_dict:
+        return types.Content(
+            role="tool",
+            parts=[
+                types.Part.from_function_response(
+                    name=function_call_part.name,
+                    response={"error": f"Unknown function: {function_call_part.name}"},
+                )
+            ],
+        )
+
+    args = dict(function_call_part.args)
+    args["working_directory"] = WORKING_DIR
+    result = function_names_dict[function_name](**args)
+
+    return types.Content(
+        role="tool",
+        parts=[
+            types.Part.from_function_response(
+                name=function_name,
+                response={"result": result},
+            )
+        ],
+    )
 
 
 def main():
@@ -16,13 +58,24 @@ def main():
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
 
-    print(sys.argv)
-    if len(sys.argv) == 1:
-        print("You need to provide a command for me")
-        exit(1)
+    verbose = "--verbose" in sys.argv
 
-    # user prompt
-    user_prompt = sys.argv[1]
+    print(sys.argv)
+    args = []
+    for arg in sys.argv[1:]:
+        if not arg.startswith("--"):
+            args.append(arg)
+
+    if not args:
+        print("AI Code Assistant")
+        print('\nUsage: python main.py "your prompt here" [--verbose]')
+        print('Example: python main.py "How do I fix the calculator?"')
+        sys.exit(1)
+
+    user_prompt = " ".join(args)
+
+    if verbose:
+        print(f"User prompt: {user_prompt}\n")
 
     # Create a new list of types.Content, and set the user's prompt as the only message (for now):
     # We will use it later to keep track of the converstion between the user and the LLM
@@ -69,21 +122,27 @@ def main():
         ),
     )
 
-    print(generator.text)
-    print("")
-
-    if generator.function_calls is not None:
-        for function_call_part in generator.function_calls:
-            print(
-                f"Calling function: {function_call_part.name} ({function_call_part.args})"
-            )
-
     metadata = generator.usage_metadata
 
-    if len(sys.argv) > 2 and sys.argv[2] == "--verbose":
-        print("User prompt:", user_prompt)
+    if verbose:
         print("Prompt tokens:", metadata.prompt_token_count if metadata else 0)
         print("Response tokens:", metadata.candidates_token_count if metadata else 0)
+
+    responses = []
+    if generator.function_calls:
+        for function_call in generator.function_calls:
+            result = call_function(function_call_part=function_call)
+
+            if not result.parts or not result.parts[0].function_response:
+                raise Exception("empty function call result")
+            if verbose:
+                print(f"-> {result.parts[0].function_response.response}")
+            responses.append(result.parts[0])
+
+    print(generator.text)
+
+    if not responses:
+        raise Exception("no function responses generated, exiting.")
 
 
 if __name__ == "__main__":

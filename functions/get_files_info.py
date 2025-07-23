@@ -1,5 +1,6 @@
 import os
 from google.genai import types
+from configs import MAX_CHARS
 
 
 def get_files_info(working_directory, directory="."):
@@ -42,15 +43,16 @@ schema_get_files_info = types.FunctionDeclaration(
 )
 schema_get_file_content = types.FunctionDeclaration(
     name="get_file_content",
-    description="Read the contents of the file",
+    description=f"Reads and returns the first {MAX_CHARS} characters of the content from a specified file within the working directory.",
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
             "file_path": types.Schema(
                 type=types.Type.STRING,
-                description="The file to read contents from.",
+                description="The path to the file whose content should be read, relative to the working directory.",
             )
         },
+        required=["file_path"],
     ),
 )
 
@@ -63,21 +65,35 @@ schema_run_python_file = types.FunctionDeclaration(
             "file_path": types.Schema(
                 type=types.Type.STRING,
                 description="The python file to run.",
-            )
+            ),
+            "args": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(
+                    type=types.Type.STRING,
+                    description="Optional arguments to pass to the Python file.",
+                ),
+                description="Optional arguments to pass to the Python file.",
+            ),
         },
+        required=["file_path"],
     ),
 )
 
 schema_write_file = types.FunctionDeclaration(
     name="write_file",
-    description="Write to a file",
+    description="Writes content to a file within the working directory. Creates the file if it doesn't exist.",
     parameters=types.Schema(
         type=types.Type.OBJECT,
         properties={
             "file_path": types.Schema(
                 type=types.Type.STRING,
-                description="The file to write to. If not provided, create one else override the existing one",
-            )
+                description="Path to the file to write to. It should be relative to the working directory.",
+            ),
+            "content": types.Schema(
+                type=types.Type.STRING,
+                description="Content to write to the file",
+            ),
         },
+        required=["file_path", "content"],
     ),
 )
