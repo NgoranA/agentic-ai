@@ -11,7 +11,7 @@ from functions.get_files_info import (
     schema_write_file,
     schema_run_python_file,
 )
-from configs import WORKING_DIR
+from configs import WORKING_DIR, MAX_ITERATIONS
 
 
 def call_function(function_call_part, verbose=False):
@@ -104,7 +104,6 @@ def main():
     """
 
     model_name = "gemini-2.0-flash-001"
-
     available_functions = types.Tool(
         function_declarations=[
             schema_get_files_info,
@@ -114,35 +113,73 @@ def main():
         ]
     )
 
-    generator = client.models.generate_content(
-        model=model_name,
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions], system_instruction=system_prompt
-        ),
-    )
+    iteration = 0
+    while iteration <= MAX_ITERATIONS:
+        try:
+            #
+            # generation starts here #
+            #
 
-    metadata = generator.usage_metadata
+            generator = client.models.generate_content(
+                model=model_name,
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    tools=[available_functions], system_instruction=system_prompt
+                ),
+            )
 
-    if verbose:
-        print("Prompt tokens:", metadata.prompt_token_count if metadata else 0)
-        print("Response tokens:", metadata.candidates_token_count if metadata else 0)
+            metadata = generator.usage_metadata
 
-    responses = []
-    if generator.function_calls:
-        for function_call in generator.function_calls:
-            result = call_function(function_call_part=function_call)
-
-            if not result.parts or not result.parts[0].function_response:
-                raise Exception("empty function call result")
             if verbose:
-                print(f"-> {result.parts[0].function_response.response}")
-            responses.append(result.parts[0])
+                print("Prompt tokens:", metadata.prompt_token_count if metadata else 0)
+                print(
+                    "Response tokens:",
+                    metadata.candidates_token_count if metadata else 0,
+                )
 
-    print(generator.text)
+            responses = []
+            if generator.function_calls:
+                for function_call in generator.function_calls:
+                    result = call_function(function_call_part=function_call)
 
-    if not responses:
-        raise Exception("no function responses generated, exiting.")
+                    if not result.parts or not result.parts[0].function_response:
+                        raise Exception("empty function call result")
+                    if verbose:
+                        print(f"-> {result.parts[0].function_response.response}")
+
+                    # we want to make sure that the name is none in order to satisfy the type checker.
+                    name = result.parts[0].function_response.name or "unknown_function"
+                    result_message = types.Content(
+                        role="tool",
+                        parts=[
+                            types.Part.from_function_response(
+                                response={
+                                    "result": result.parts[0].function_response.response
+                                },
+                                name=name,
+                            )
+                        ],
+                    )
+                    # append this to messages
+                    messages.append(result_message)
+                    # keep the result for future use by the LLM
+                    responses.append(result.parts[0])
+
+            if generator.text:
+                print(generator.text)
+            else:
+                iteration += 1
+
+            # Using the walrus operator to assign generator.candidates to candidates only if it exists and is truthy
+            if candidates := getattr(generator, "candidates", None):
+                for candidate in candidates:
+                    # adding the candidate content to the messages list
+                    messages.append(candidate.content)
+
+            if not responses:
+                raise Exception("no function responses generated, exiting.")
+        except Exception as e:
+            return f"Error: {e} "
 
 
 if __name__ == "__main__":
