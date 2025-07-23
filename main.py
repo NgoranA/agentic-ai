@@ -61,6 +61,7 @@ def main():
     verbose = "--verbose" in sys.argv
 
     print(sys.argv)
+
     args = []
     for arg in sys.argv[1:]:
         if not arg.startswith("--"):
@@ -114,7 +115,11 @@ def main():
     )
 
     iteration = 0
-    while iteration <= MAX_ITERATIONS:
+    while True:
+        iteration += 1
+        if iteration > MAX_ITERATIONS:
+            print(f"Maximum iterations ({MAX_ITERATIONS}) reached.")
+            sys.exit(1)
         try:
             #
             # generation starts here #
@@ -137,6 +142,9 @@ def main():
                     metadata.candidates_token_count if metadata else 0,
                 )
 
+            # if not generator.function_calls:
+            #     return generator.text
+
             responses = []
             if generator.function_calls:
                 for function_call in generator.function_calls:
@@ -146,29 +154,12 @@ def main():
                         raise Exception("empty function call result")
                     if verbose:
                         print(f"-> {result.parts[0].function_response.response}")
-
-                    # we want to make sure that the name is none in order to satisfy the type checker.
-                    name = result.parts[0].function_response.name or "unknown_function"
-                    result_message = types.Content(
-                        role="tool",
-                        parts=[
-                            types.Part.from_function_response(
-                                response={
-                                    "result": result.parts[0].function_response.response
-                                },
-                                name=name,
-                            )
-                        ],
-                    )
-                    # append this to messages
-                    messages.append(result_message)
                     # keep the result for future use by the LLM
                     responses.append(result.parts[0])
 
             if generator.text:
+                print("Final response:")
                 print(generator.text)
-            else:
-                iteration += 1
 
             # Using the walrus operator to assign generator.candidates to candidates only if it exists and is truthy
             if candidates := getattr(generator, "candidates", None):
@@ -178,6 +169,8 @@ def main():
 
             if not responses:
                 raise Exception("no function responses generated, exiting.")
+
+            messages.append(types.Content(role="tool", parts=responses))
         except Exception as e:
             return f"Error: {e} "
 
